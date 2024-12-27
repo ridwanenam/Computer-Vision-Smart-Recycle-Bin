@@ -7,7 +7,7 @@ import json
 
 pygame.init()
 
-serial_port = "/dev/ttyACM0"  # port ke USB 2.0 raspberry
+serial_port = "/dev/ttyAMA10" 
 baud_rate = 9600
 arduino = serial.Serial(serial_port, baud_rate)
 
@@ -72,6 +72,14 @@ def draw_progress_bar(x, y, width, height, progress, label_text):
     label = render_text_with_outline(label_text, font, WHITE, BLACK)
     screen.blit(label, (x, y - 25))
 
+def set_custom_background(screen, image_path, resolution=(900, 350)):
+    try:
+        background = pygame.image.load(image_path)
+        background = pygame.transform.scale(background, resolution)
+        screen.blit(background, (0, 0)) 
+    except pygame.error as e:
+        print(f"Error loading background image: {e}")
+
 def draw_frame(x, y, width, height, frame=None, fps=None):
     # border
     surface = pygame.Surface((width + 10, height + 10), pygame.SRCALPHA)
@@ -95,7 +103,7 @@ def draw_frame(x, y, width, height, frame=None, fps=None):
         screen.blit(fps_surface, (x + 10, y - 28))
 
 current_mode = "Manual"  # default mode
-progress_values = {"ORGANIK": 0, "ANORGANIK": 0, "B3": 0}
+progress_values = {"ORGANIK": 0.0, "ANORGANIK": 0.0, "B3": 0.0}
 
 def calculate_progress(distance):
     if distance <= 10:
@@ -137,7 +145,7 @@ def send_command_to_arduino(command):
 running = True
 
 while running:
-    screen.fill(DARK_GRAY)
+    set_custom_background(screen, "BG.jpg")
     read_arduino_data()
 
     # frame dari kamera
@@ -247,4 +255,3 @@ while running:
 
 cap.release()
 pygame.quit()
-
