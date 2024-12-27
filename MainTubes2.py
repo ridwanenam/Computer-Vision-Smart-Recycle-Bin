@@ -40,10 +40,10 @@ if not cap.isOpened():
     exit()
 
 # ========= MODEL =========
-model_path = ("yolov8n.pt")
+model_path = ("best.pt")
 model = YOLO(model_path)
 
-# rencana indeks: 0 - organik, 1 - anorganik, 2 - B3
+# indeks: 0 - anorganik, 1 - B3, 2 - organik
 objects_to_detect = [0, 1, 2]
 last_detected = None
 
@@ -73,15 +73,15 @@ def draw_progress_bar(x, y, width, height, progress, label_text):
     screen.blit(label, (x, y - 25))
 
 def draw_frame(x, y, width, height, frame=None, fps=None):
-    # Border (80% transparency)
+    # border
     surface = pygame.Surface((width + 10, height + 10), pygame.SRCALPHA)
     surface.fill((0, 0, 0, 0))
     for i in range(0, width + 10, 10):
-        pygame.draw.line(surface, (255, 255, 255, 200), (i, 0), (i + 5, 0), 5)  # Top border
-        pygame.draw.line(surface, (255, 255, 255, 200), (i, height + 9), (i + 5, height + 9), 5)  # Bottom border
+        pygame.draw.line(surface, (255, 255, 255, 200), (i, 0), (i + 5, 0), 5)  # top border
+        pygame.draw.line(surface, (255, 255, 255, 200), (i, height + 9), (i + 5, height + 9), 5)  # bottom border
     for i in range(0, height + 10, 10):
-        pygame.draw.line(surface, (255, 255, 255, 200), (0, i), (0, i + 5), 5)  # Left border
-        pygame.draw.line(surface, (255, 255, 255, 200), (width + 9, i), (width + 9, i + 5), 5)  # Right border
+        pygame.draw.line(surface, (255, 255, 255, 200), (0, i), (0, i + 5), 5)  # left border
+        pygame.draw.line(surface, (255, 255, 255, 200), (width + 9, i), (width + 9, i + 5), 5)  # right border
     screen.blit(surface, (x - 5, y - 5))
 
     if frame is not None:
@@ -112,7 +112,7 @@ def read_arduino_data():
             data = arduino.readline().decode('utf-8').strip() 
             distances = json.loads(data)  # parsing data JSON
             
-            # Update progress values
+            # update progress values
             progress_values["ORGANIK"] = calculate_progress(distances["organik"])
             progress_values["ANORGANIK"] = calculate_progress(distances["anorganik"])
             progress_values["B3"] = calculate_progress(distances["b3"])
@@ -159,15 +159,15 @@ while running:
     if detected_object is not None and detected_object != last_detected:
         last_detected = detected_object
 
-        if detected_object == 0:
+        if detected_object == 2:
             print("Sampah Organik Terdetect")
             if current_mode == "Auto":
                 send_command_to_arduino("AutoOrganik")  
-        elif detected_object == 1:
+        elif detected_object == 0:
             print("Sampah Anorganik Terdetect")
             if current_mode == "Auto":
                 send_command_to_arduino("AutoAnorganik")  
-        elif detected_object == 2:
+        elif detected_object == 1:
             print("Sampah B3 Terdetect")
             if current_mode == "Auto":
                 send_command_to_arduino("AutoB3")  
