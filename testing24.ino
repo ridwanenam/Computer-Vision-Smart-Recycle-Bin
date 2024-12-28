@@ -24,14 +24,6 @@ Servo myservo;
 
 String command = "";
 
-// konstanta stepper
-#define STEPS_PER_REV 200
-#define DEGREE_STEP (STEPS_PER_REV / 360.0)
-#define STEPS_MANUAL_DEGREES (int)(DEGREE_STEP * 10)
-
-// variabel posisi stepper
-int current_position = 0;
-
 void setup() {
   Serial.begin(9600);
 
@@ -65,78 +57,6 @@ float getDistance(int trigPin, int echoPin) {
   long duration = pulseIn(echoPin, HIGH);
   float distance = duration * 0.034 / 2;
   return distance;
-}
-
-void rotateStepper(int steps, bool clockwise) {
-  digitalWrite(DIRECTION, clockwise ? FORWARD : REVERSE);
-
-  for (int i = 0; i < steps; i++) {
-    digitalWrite(STEP, HIGH);
-    delay(SPEED);
-    digitalWrite(STEP, LOW);
-    delay(SPEED);
-  }
-}
-
-void left() {
-  rotateStepper(STEPS_MANUAL_DEGREES, false);
-  current_position -= 10;
-  if (current_position < 0) {
-    current_position += 360;
-  }
-}
-
-void right() {
-  rotateStepper(STEPS_MANUAL_DEGREES, true);
-  current_position += 10;
-  if (current_position >= 360) {
-    current_position -= 360;
-  }
-}
-
-void reset() {
-  int steps_to_zero = (int)(current_position * DEGREE_STEP);
-  rotateStepper(steps_to_zero, false);
-  current_position = 0;
-}
-
-void openServo() {
-  myservo.write(90);
-  delay(2000);
-  myservo.write(0);
-}
-
-void autoOrganik() {
-  reset(); 
-  int steps_organic_degrees = (int)(130 * DEGREE_STEP); 
-  rotateStepper(steps_organic_degrees, true); 
-  openServo(); 
-  reset(); 
-}
-
-void autoAnorganik() {
-  reset(); 
-  int steps_anorganic_degrees = (int)(235 * DEGREE_STEP); 
-  rotateStepper(steps_anorganic_degrees, true); 
-  openServo(); 
-  reset(); 
-}
-
-void autoB3() {
-  reset(); 
-  int steps_b3_degrees = (int)(315 * DEGREE_STEP);
-  rotateStepper(steps_b3_degrees, true);
-  openServo();
-  reset(); 
-}
-
-
-void buzzerOn() {
-  digitalWrite(BUZZER, HIGH);
-}
-
-void buzzerOff() {
-  digitalWrite(BUZZER, LOW);
 }
 
 void loop() {
