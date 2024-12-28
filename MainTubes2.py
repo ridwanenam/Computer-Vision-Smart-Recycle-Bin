@@ -19,7 +19,7 @@ WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 RED = (255, 0, 0)
 GRAY = (200, 200, 200)
-DARK_GRAY = (50, 50, 50)
+DARK_GRAY = (30, 30, 30)
 ELEGANT_BORDER = (100, 100, 100)
 WHITE_RED = (255, 68, 68)
 WHITE_GREEN = (175, 243, 1)
@@ -39,7 +39,7 @@ if not cap.isOpened():
     exit()
 
 # ========= MODEL =========
-model_path = ("best1.pt")
+model_path = ("ModelV3_ncnn_model")
 model = YOLO(model_path)
 
 # indeks: 0 - anorganik, 1 - B3, 2 - organik (data.yaml)
@@ -68,7 +68,7 @@ def draw_button(x, y, width, height, color, text, text_color=WHITE, border_color
 def draw_progress_bar(x, y, width, height, progress, label_text):
     pygame.draw.rect(screen, GRAY, (x, y, width, height), border_radius=5)
     pygame.draw.rect(screen, TEAL, (x, y, width * progress, height), border_radius=5)
-    label = render_text_with_outline(label_text, font, WHITE, BLACK)
+    label = render_text_with_outline(label_text, font, WHITE, DARK_GRAY)
     screen.blit(label, (x, y - 25))
 
 def set_custom_background(screen, image_path, resolution=(900, 350)):
@@ -101,7 +101,7 @@ def draw_frame(x, y, width, height, frame=None, fps=None):
         fps_surface = render_text_with_outline(fps_text, font, BLUE_TOSCA, WHITE)
         screen.blit(fps_surface, (x + 10, y - 28))
 
-current_mode = "Auto"  # default mode
+current_mode = "Auto"  # default mode (Auto-Manual)
 progress_values = {"ORGANIK": 0.0, "ANORGANIK": 0.0, "B3": 0.0}
 
 def calculate_progress(distance):
@@ -146,6 +146,15 @@ def send_command_to_arduino(command):
     except Exception as e:
         print(f"Error sending command: {e}")
 
+def draw_gradient(screen, color1, color2, rect):
+    x, y, width, height = rect
+    for i in range(height):
+        ratio = i / height
+        r = int(color1[0] * (1 - ratio) + color2[0] * ratio)
+        g = int(color1[1] * (1 - ratio) + color2[1] * ratio)
+        b = int(color1[2] * (1 - ratio) + color2[2] * ratio)
+        pygame.draw.line(screen, (r, g, b), (x, y + i), (x + width, y + i))
+
 running = True
 while running:
     set_custom_background(screen, "BG22.jpg")
@@ -158,7 +167,7 @@ while running:
         continue 
 
     # object detection di frame
-    results = model(frame, imgsz=160)
+    results = model(frame, imgsz=640)
     detected_objects = results[0].boxes.cls.tolist()  
 
     detected_object = None
@@ -215,8 +224,8 @@ while running:
                 send_command_to_arduino("RESET") # RESET = reset stepper ke 0°
 
     # header
-    pygame.draw.rect(screen, BLUE_TOSCA, (0, 0, SCREEN_WIDTH, 50))
-    header_text = render_text_with_outline("DASHBOARD SMART RECYCLE BIN", large_font, WHITE, BLACK)
+    draw_gradient(screen, BLUE_TOSCA, WHITE_GREEN, (0, 0, SCREEN_WIDTH, 50))
+    header_text = render_text_with_outline("DASHBOARD SMART RECYCLE BIN", large_font, WHITE, DARK_GRAY)
     screen.blit(header_text, (20, 10))
 
     # FPS dan frame kamera
@@ -226,7 +235,7 @@ while running:
 
     # progress bar volume sampah
     pygame.draw.rect(screen, WHITE, (15, 105, 225, 210), border_radius=15)
-    pygame.draw.rect(screen, BLACK, (20, 110, 215, 200), border_radius=10)
+    pygame.draw.rect(screen, DARK_GRAY, (20, 110, 215, 200), border_radius=10)
     volume_text = render_text_with_outline("VOLUME SAMPAH", font2, BLUE_TOSCA, WHITE)
     screen.blit(volume_text, (30, 120))
 
@@ -236,7 +245,7 @@ while running:
 
     # tombol mode
     pygame.draw.rect(screen, WHITE, (660, 80, 225, 90), border_radius=5)
-    pygame.draw.rect(screen, BLACK, (665, 85, 215, 80), border_radius=5)
+    pygame.draw.rect(screen, DARK_GRAY, (665, 85, 215, 80), border_radius=5)
     mode_text = render_text_with_outline("MODE", font2, BLUE_TOSCA, WHITE)
     screen.blit(mode_text, (734, 88))
 
@@ -245,7 +254,7 @@ while running:
 
     # tombol kontrol
     pygame.draw.rect(screen, WHITE, (660, 185, 225, 145), border_radius=15)
-    pygame.draw.rect(screen, BLACK, (665, 190, 215, 135), border_radius=10)
+    pygame.draw.rect(screen, DARK_GRAY, (665, 190, 215, 135), border_radius=10)
     stepper_text = render_text_with_outline("CONTROL", font2, BLUE_TOSCA, WHITE)
     screen.blit(stepper_text, (717, 197))
 
