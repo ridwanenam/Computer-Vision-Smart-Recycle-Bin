@@ -3,11 +3,10 @@ from pygame.locals import *
 import cv2
 from ultralytics import YOLO 
 import serial
-import json
 
 pygame.init()
 
-serial_port = "/dev/ttyAMA10" 
+serial_port = "/dev/ttyUSB0" 
 baud_rate = 9600
 arduino = serial.Serial(serial_port, baud_rate)
 
@@ -40,10 +39,10 @@ if not cap.isOpened():
     exit()
 
 # ========= MODEL =========
-model_path = ("best.pt")
+model_path = ("best1.pt")
 model = YOLO(model_path)
 
-# indeks: 0 - anorganik, 1 - B3, 2 - organik
+# indeks: 0 - anorganik, 1 - B3, 2 - organik (data.yaml)
 objects_to_detect = [0, 1, 2]
 last_detected = None
 
@@ -102,7 +101,7 @@ def draw_frame(x, y, width, height, frame=None, fps=None):
         fps_surface = render_text_with_outline(fps_text, font, BLUE_TOSCA, WHITE)
         screen.blit(fps_surface, (x + 10, y - 28))
 
-current_mode = "Manual"  # default mode
+current_mode = "Auto"  # default mode
 progress_values = {"ORGANIK": 0.0, "ANORGANIK": 0.0, "B3": 0.0}
 
 def calculate_progress(distance):
@@ -117,24 +116,29 @@ def calculate_progress(distance):
 def read_arduino_data():
     try:
         if arduino.in_waiting > 0:
-            data = arduino.readline().decode('utf-8').strip() 
-            distances = json.loads(data)  # parsing data JSON
-            
-            # update progress values
-            progress_values["ORGANIK"] = calculate_progress(distances["organik"])
-            progress_values["ANORGANIK"] = calculate_progress(distances["anorganik"])
-            progress_values["B3"] = calculate_progress(distances["b3"])
+            data = arduino.readline().decode('utf-8').strip()
+            print(f"Received data: {data}")  # debug print
 
-            # buzzer
-            if distances["organik"] > 90 or distances["anorganik"] > 90 or distances["b3"] > 90:
-                send_command_to_arduino("BuzzerON")
+            distances = data.split(",")
+            if len(distances) == 3:  
+                organik = float(distances[0])
+                anorganik = float(distances[1])
+                b3 = float(distances[2])
+
+                # update progress values
+                progress_values["ORGANIK"] = calculate_progress(organik)
+                progress_values["ANORGANIK"] = calculate_progress(anorganik)
+                progress_values["B3"] = calculate_progress(b3)
+
+                # buzzer
+                if organik > 90 or anorganik > 90 or b3 > 90:
+                    send_command_to_arduino("BuzzerON")
+                else:
+                    send_command_to_arduino("BuzzerOFF")
             else:
-                send_command_to_arduino("BuzzerOFF")
-                
-    except json.JSONDecodeError:
-        print(f"Error decoding JSON: {data}")  # error decode JSON
+                print(f"Data format error: {data}")
     except Exception as e:
-        print(f"Error reading serial data: {e}")
+        print(f"Error reading data: {e}")
 
 def send_command_to_arduino(command):
     try:
@@ -143,9 +147,8 @@ def send_command_to_arduino(command):
         print(f"Error sending command: {e}")
 
 running = True
-
 while running:
-    set_custom_background(screen, "BG.jpg")
+    set_custom_background(screen, "BG22.jpg")
     read_arduino_data()
 
     # frame dari kamera
@@ -156,29 +159,29 @@ while running:
 
     # object detection di frame
     results = model(frame, imgsz=160)
-    detected_objects = results[0].boxes.cls.tolist()  # ID objek detected
+    detected_objects = results[0].boxes.cls.tolist()  
 
     detected_object = None
-    for obj_id in detected_objects:
-        if obj_id in objects_to_detect:
+    for obj_id in objects_to_detect:
+        if obj_id in detected_objects:
             detected_object = obj_id
-            break 
+            break
 
     if detected_object is not None and detected_object != last_detected:
         last_detected = detected_object
 
         if detected_object == 2:
-            print("Sampah Organik Terdetect")
+            print("Sampah Organik Terdeteksi")
             if current_mode == "Auto":
-                send_command_to_arduino("AutoOrganik")  
+                send_command_to_arduino("AutoOrganik")
         elif detected_object == 0:
-            print("Sampah Anorganik Terdetect")
+            print("Sampah Anorganik Terdeteksi")
             if current_mode == "Auto":
-                send_command_to_arduino("AutoAnorganik")  
+                send_command_to_arduino("AutoAnorganik")
         elif detected_object == 1:
-            print("Sampah B3 Terdetect")
+            print("Sampah B3 Terdeteksi")
             if current_mode == "Auto":
-                send_command_to_arduino("AutoB3")  
+                send_command_to_arduino("AutoB3")
 
     # frame hasil deteksi
     annotated_frame = results[0].plot()
