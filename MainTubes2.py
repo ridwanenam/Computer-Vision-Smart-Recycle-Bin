@@ -3,10 +3,13 @@ from pygame.locals import *
 import cv2
 from ultralytics import YOLO 
 import serial
+import time
+from queue import Queue
 
 pygame.init()
 
-serial_port = "/dev/ttyUSB0" 
+command_queue = Queue()
+serial_port = "/dev/ttyACM0" 
 baud_rate = 9600
 arduino = serial.Serial(serial_port, baud_rate)
 
@@ -22,7 +25,7 @@ GRAY = (200, 200, 200)
 DARK_GRAY = (30, 30, 30)
 ELEGANT_BORDER = (100, 100, 100)
 WHITE_RED = (255, 68, 68)
-WHITE_GREEN = (175, 243, 1)
+WHITE_GREEN = (6, 218, 218)
 BLUE_TOSCA = (7, 217, 160)
 DARK_BLUE = (7, 53, 66)
 TEAL = (0, 128, 128)
@@ -46,6 +49,15 @@ model = YOLO(model_path)
 objects_to_detect = [0, 1, 2]
 last_detected = None
 
+blink_timer = 0
+blink_button = None
+
+blink_duration = 0.3
+stable_duration = 5
+
+detected_start_time = None  
+object_stable = False 
+
 def render_text_with_outline(text, font, text_color, outline_color):
     base = font.render(text, True, outline_color)
     outline = font.render(text, True, text_color)
@@ -57,9 +69,10 @@ def render_text_with_outline(text, font, text_color, outline_color):
     outline_surface.blit(outline, (0, 0))
     return outline_surface
 
-def draw_button(x, y, width, height, color, text, text_color=WHITE, border_color=ELEGANT_BORDER, border_radius=2):
+def draw_button(x, y, width, height, color, text, text_color=WHITE, border_color=ELEGANT_BORDER, border_radius=2, button_blinking=False):
+    button_color = GRAY if button_blinking else color
     pygame.draw.rect(screen, border_color, (x, y, width, height), border_radius)
-    pygame.draw.rect(screen, color, (x + 2, y + 2, width - 4, height - 4), border_radius)
+    pygame.draw.rect(screen, button_color, (x + 2, y + 2, width - 4, height - 4), border_radius)
     label = render_text_with_outline(text, font, text_color, WHITE)
     text_rect = label.get_rect(center=(x + width // 2, y + height // 2))
     screen.blit(label, text_rect)
@@ -101,7 +114,7 @@ def draw_frame(x, y, width, height, frame=None, fps=None):
         fps_surface = render_text_with_outline(fps_text, font, BLUE_TOSCA, WHITE)
         screen.blit(fps_surface, (x + 10, y - 28))
 
-current_mode = "Auto"  # default mode (Auto-Manual)
+current_mode = "Manual"  # default mode (Auto-Manual)
 progress_values = {"ORGANIK": 0.0, "ANORGANIK": 0.0, "B3": 0.0}
 
 def calculate_progress(distance):
@@ -141,10 +154,16 @@ def read_arduino_data():
         print(f"Error reading data: {e}")
 
 def send_command_to_arduino(command):
-    try:
-        arduino.write(command.encode())
-    except Exception as e:
-        print(f"Error sending command: {e}")
+    if not command_queue.empty():
+        return  
+
+    command_queue.put(command) 
+
+    while not command_queue.empty():
+        cmd_to_send = command_queue.get()
+        print(f"Mengirim perintah: {cmd_to_send}")
+        arduino.write(f"cmd:{cmd_to_send}\n".encode()) 
+        # time.sleep(0.1)  
 
 def draw_gradient(screen, color1, color2, rect):
     x, y, width, height = rect
@@ -160,13 +179,19 @@ while running:
     set_custom_background(screen, "BG22.jpg")
     read_arduino_data()
 
+    # timer blink
+    if blink_button:
+        blink_timer += 1
+        if blink_timer > blink_duration: 
+            blink_button = None
+            blink_timer = 0
+
     # frame dari kamera
     ret, frame = cap.read()
     if not ret:
-        print("can't read frame.")
+        print("Can't read frame.")
         continue 
 
-    # object detection di frame
     results = model(frame, imgsz=640)
     detected_objects = results[0].boxes.cls.tolist()  
 
@@ -177,22 +202,33 @@ while running:
             break
 
     if detected_object is not None and detected_object != last_detected:
-        last_detected = detected_object
+        detected_start_time = time.time()
+        object_stable = False  
+        last_detected = detected_object 
+        
+    elif detected_object == last_detected:
+        if detected_start_time is None:
+            detected_start_time = time.time() 
+        else:
+            detection_duration = time.time() - detected_start_time
+            if detection_duration >= stable_duration and not object_stable:
+                object_stable = True 
+                if detected_object == 2:
+                    print("Sampah Organik Terdeteksi")
+                    if current_mode == "Auto":
+                        send_command_to_arduino("AutoOrganik")
+                elif detected_object == 0:
+                    print("Sampah Anorganik Terdeteksi")
+                    if current_mode == "Auto":
+                        send_command_to_arduino("AutoAnorganik")
+                elif detected_object == 1:
+                    print("Sampah B3 Terdeteksi")
+                    if current_mode == "Auto":
+                        send_command_to_arduino("AutoB3")
+    else:
+        detected_start_time = None
+        object_stable = False
 
-        if detected_object == 2:
-            print("Sampah Organik Terdeteksi")
-            if current_mode == "Auto":
-                send_command_to_arduino("AutoOrganik")
-        elif detected_object == 0:
-            print("Sampah Anorganik Terdeteksi")
-            if current_mode == "Auto":
-                send_command_to_arduino("AutoAnorganik")
-        elif detected_object == 1:
-            print("Sampah B3 Terdeteksi")
-            if current_mode == "Auto":
-                send_command_to_arduino("AutoB3")
-
-    # frame hasil deteksi
     annotated_frame = results[0].plot()
 
     # mode dan kontrol
@@ -213,15 +249,25 @@ while running:
             elif btn_left.collidepoint(mouse_pos) and current_mode == "Manual":
                 print("LEFT")
                 send_command_to_arduino("LEFT") # LEFT = stepper rotasi ke kiri (CCW)
+                blink_button = "LEFT"
             elif btn_right.collidepoint(mouse_pos) and current_mode == "Manual":
                 print("RIGHT")
                 send_command_to_arduino("RIGHT") # RIGHT = stepper rotasi ke kanan (CW)
+                blink_button = "RIGHT"
             elif btn_servo.collidepoint(mouse_pos) and current_mode == "Manual":
                 print("OPEN")
                 send_command_to_arduino("OPEN") # OPEN = buka tutup servo di mode manual
+                blink_button = "OPEN"
             elif btn_reset.collidepoint(mouse_pos) and current_mode in ["Auto", "Manual"]:
                 print("RESET")
-                send_command_to_arduino("RESET") # RESET = reset stepper ke 0°
+                send_command_to_arduino("RESET") # RESET = reset stepper dan servo ke 0° 
+                blink_button = "RESET"
+                detected_object = None
+                last_detected = None
+                detected_start_time = None
+                object_stable = False
+                send_command_to_arduino("BuzzerOFF")
+
 
     # header
     draw_gradient(screen, BLUE_TOSCA, WHITE_GREEN, (0, 0, SCREEN_WIDTH, 50))
@@ -258,10 +304,11 @@ while running:
     stepper_text = render_text_with_outline("CONTROL", font2, BLUE_TOSCA, WHITE)
     screen.blit(stepper_text, (717, 197))
 
-    btn_left = draw_button(680, 230, 80, 40, BLUE_TOSCA, "LEFT")
-    btn_right = draw_button(780, 230, 80, 40, BLUE_TOSCA, "RIGHT")
-    btn_reset = draw_button(680, 277, 80, 40, BLUE_TOSCA, "RESET")
-    btn_servo = draw_button(780, 277, 80, 40, BLUE_TOSCA, "OPEN")
+    # gambar tombol
+    btn_left = draw_button(680, 230, 80, 40, BLUE_TOSCA, "LEFT", button_blinking=(blink_button == "LEFT"))
+    btn_right = draw_button(780, 230, 80, 40, BLUE_TOSCA, "RIGHT", button_blinking=(blink_button == "RIGHT"))
+    btn_reset = draw_button(680, 277, 80, 40, BLUE_TOSCA, "RESET", button_blinking=(blink_button == "RESET"))
+    btn_servo = draw_button(780, 277, 80, 40, BLUE_TOSCA, "OPEN", button_blinking=(blink_button == "OPEN"))
 
     pygame.display.update()
 
