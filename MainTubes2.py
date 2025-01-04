@@ -41,7 +41,7 @@ if not cap.isOpened():
     pygame.quit()
     exit()
 
-# ========= MODEL =========
+# ========= MODEL ========= 
 model_path = ("ModelV3_ncnn_model")
 model = YOLO(model_path)
 
@@ -53,7 +53,7 @@ blink_timer = 0
 blink_button = None
 
 blink_duration = 0.3
-stable_duration = 5
+stable_duration = 3
 
 detected_start_time = None  
 object_stable = False 
@@ -118,19 +118,19 @@ current_mode = "Manual"  # default mode (Auto-Manual)
 progress_values = {"ORGANIK": 0.0, "ANORGANIK": 0.0, "B3": 0.0}
 
 def calculate_progress(distance):
-    if distance <= 10:
+    if distance <= 5:
         return 1.0
-    elif distance >= 100:
+    elif distance >= 31:
         return 0.0
     else:
-        return max(0, (100 - distance) / 100)
+        return max(0, (31 - distance) / 26)
 
 # transfer data ultrasonik
 def read_arduino_data():
     try:
         if arduino.in_waiting > 0:
             data = arduino.readline().decode('utf-8').strip()
-            print(f"Received data: {data}")  # debug print
+            print(f"Received data: {data}") 
 
             distances = data.split(",")
             if len(distances) == 3:  
@@ -144,7 +144,7 @@ def read_arduino_data():
                 progress_values["B3"] = calculate_progress(b3)
 
                 # buzzer
-                if organik > 90 or anorganik > 90 or b3 > 90:
+                if organik < 10  or anorganik < 10 or b3 < 10:
                     send_command_to_arduino("BuzzerON")
                 else:
                     send_command_to_arduino("BuzzerOFF")
@@ -186,7 +186,7 @@ while running:
             blink_button = None
             blink_timer = 0
 
-    # frame dari kamera
+    # frame dari kamera 1
     ret, frame = cap.read()
     if not ret:
         print("Can't read frame.")
@@ -217,14 +217,20 @@ while running:
                     print("Sampah Organik Terdeteksi")
                     if current_mode == "Auto":
                         send_command_to_arduino("AutoOrganik")
+                        # last_detected = None
+                        # detected_object = None
                 elif detected_object == 0:
                     print("Sampah Anorganik Terdeteksi")
                     if current_mode == "Auto":
                         send_command_to_arduino("AutoAnorganik")
+                        # last_detected = None
+                        # detected_object = None
                 elif detected_object == 1:
                     print("Sampah B3 Terdeteksi")
                     if current_mode == "Auto":
                         send_command_to_arduino("AutoB3")
+                        # last_detected = None
+                        # detected_object = None
     else:
         detected_start_time = None
         object_stable = False
@@ -256,11 +262,11 @@ while running:
                 blink_button = "RIGHT"
             elif btn_servo.collidepoint(mouse_pos) and current_mode == "Manual":
                 print("OPEN")
-                send_command_to_arduino("OPEN") # OPEN = buka tutup servo di mode manual
+                send_command_to_arduino("OPEN") # OPEN = buka tutup servo
                 blink_button = "OPEN"
             elif btn_reset.collidepoint(mouse_pos) and current_mode in ["Auto", "Manual"]:
                 print("RESET")
-                send_command_to_arduino("RESET") # RESET = reset stepper dan servo ke 0° 
+                send_command_to_arduino("RESET") # RESET = reset stepper dan servo 
                 blink_button = "RESET"
                 detected_object = None
                 last_detected = None
