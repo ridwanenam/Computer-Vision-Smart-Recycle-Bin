@@ -1,10 +1,10 @@
 #include <Servo.h>
 
 // ultrasonic
-#define TRIG_ORGANIK 2
-#define ECHO_ORGANIK 3
-#define TRIG_ANORGANIK 4
-#define ECHO_ANORGANIK 5
+#define TRIG_ORGANIK 4
+#define ECHO_ORGANIK 5
+#define TRIG_ANORGANIK 2
+#define ECHO_ANORGANIK 3
 #define TRIG_B3 6
 #define ECHO_B3 7
 
@@ -12,7 +12,7 @@
 #define ENABLE 8
 #define DIRECTION 9
 #define STEP 10
-#define SPEED 2
+#define SPEED 3
 #define FORWARD HIGH
 #define REVERSE LOW
 
@@ -37,18 +37,8 @@ unsigned long previousBuzzerMillis = 0;
 unsigned long buzzerInterval = 0; 
 bool buzzerTone = false;
 
-unsigned long previousDistanceMillis = 0;
-const unsigned long distanceInterval = 100; 
-
-unsigned long previousSerialMillis = 0;
-const unsigned long serialInterval = 10;
-
-int manual_left_degree = 50;
-int manual_right_degree = 50;
-
-int auto_organik_degree = 135;
-int auto_anorganik_degree = 235;
-int auto_b3_degree = 315;
+int manual_left_degree = 1;
+int manual_right_degree = 1;
 
 
 void setup() {
@@ -64,7 +54,7 @@ void setup() {
   pinMode(ENABLE, OUTPUT);
   pinMode(DIRECTION, OUTPUT);
   pinMode(STEP, OUTPUT);
-  digitalWrite(ENABLE, LOW);
+  digitalWrite(ENABLE, LOW); 
 
   pinMode(buzzer, OUTPUT);
   digitalWrite(buzzer, LOW);
@@ -99,7 +89,7 @@ void rotateStepper(int steps, bool clockwise) {
 }
 
 void left() {
-  rotateStepper(STEPS_MANUAL_DEGREES, false);
+  rotateStepper(STEPS_MANUAL_DEGREES*20, false);
   current_position -= manual_left_degree;
   if (current_position < 0) {
     current_position += 360;
@@ -107,7 +97,7 @@ void left() {
 }
 
 void right() {
-  rotateStepper(STEPS_MANUAL_DEGREES, true);
+  rotateStepper(STEPS_MANUAL_DEGREES*20, true);
   current_position += manual_right_degree;
   if (current_position >= 360) {
     current_position -= 360;
@@ -115,40 +105,64 @@ void right() {
 }
 
 void reset() {
-  int steps_to_zero = (int)(current_position * DEGREE_STEP);
-  rotateStepper(steps_to_zero, false);
+  if (current_position != 0) {
+    int steps_cw = current_position * DEGREE_STEP;
+    int steps_ccw = (360 - current_position) * DEGREE_STEP;
+
+    if (steps_cw <= steps_ccw) {
+      rotateStepper(steps_cw, false); // CounterClockWise
+    } else {
+      rotateStepper(steps_ccw, true); // Clockwise
+    }
+  }
+
+  else {
+    Serial.print("NOTE: Current position = 0");
+  }
   current_position = 0;
   delay(1000);
-  myservo.write(0);
+  myservo.write(10);
 }
+
 
 void openServo() {
   myservo.write(70);
-  delay(2000);
+  delay(1250);
   myservo.write(10);
-  delay(1000);
+}
+
+void moveToDegree(int target_degree) {
+  int target_steps = (int)(target_degree * DEGREE_STEP); 
+  int steps_to_move;
+
+  if (target_degree >= current_position) {
+    steps_to_move = target_steps - (int)(current_position * DEGREE_STEP);
+    rotateStepper(steps_to_move, true); // ClockWise
+  } else {
+    steps_to_move = (360 - current_position + target_degree) * DEGREE_STEP;
+    rotateStepper(steps_to_move, true); 
+  }
+
+  current_position = target_degree; 
 }
 
 void autoOrganik() {
-  reset(); 
-  int steps_organic_degrees = (int)(auto_organik_degree * DEGREE_STEP); 
-  rotateStepper(steps_organic_degrees, true); 
+  moveToDegree(100); 
+  delay(1000);
   openServo(); 
   reset(); 
 }
 
 void autoAnorganik() {
-  reset(); 
-  int steps_anorganic_degrees = (int)(auto_anorganik_degree * DEGREE_STEP); 
-  rotateStepper(steps_anorganic_degrees, true); 
+  moveToDegree(430); 
+  delay(1000);
   openServo(); 
   reset(); 
 }
 
 void autoB3() {
-  reset(); 
-  int steps_b3_degrees = (int)(auto_b3_degree * DEGREE_STEP);
-  rotateStepper(steps_b3_degrees, true);
+  moveToDegree(300); 
+  delay(1000);
   openServo();
   reset(); 
 }
@@ -184,10 +198,6 @@ void handleBuzzer() {
 }
 
 void handleDistance() {
-  unsigned long currentMillis = millis();
-  if (currentMillis - previousDistanceMillis >= distanceInterval) {
-    previousDistanceMillis = currentMillis;
-
     float distanceOrganik = getDistance(TRIG_ORGANIK, ECHO_ORGANIK);
     float distanceAnorganik = getDistance(TRIG_ANORGANIK, ECHO_ANORGANIK);
     float distanceB3 = getDistance(TRIG_B3, ECHO_B3);
@@ -198,7 +208,7 @@ void handleDistance() {
     Serial.print(distanceAnorganik);
     Serial.print(",");
     Serial.println(distanceB3);
-  }
+    delay(750);
 }
 
 void handleSerial() {
