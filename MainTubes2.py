@@ -159,7 +159,7 @@ def send_command_to_arduino(command):
         arduino.write(f"cmd:{cmd_to_send}\n".encode()) 
         # time.sleep(0.1)  
 
-def draw_gradient(screen, color1, color2, rect):
+def draw_header_color(screen, color1, color2, rect):
     x, y, width, height = rect
     for i in range(height):
         ratio = i / height
@@ -231,7 +231,7 @@ while running:
 
     annotated_frame = results[0].plot()
 
-    # mode & kontrol
+    # mode & control
     for event in pygame.event.get():
         if event.type == QUIT:
             running = False
@@ -270,7 +270,7 @@ while running:
 
 
     # header
-    draw_gradient(screen, BLUE_TOSCA, WHITE_GREEN, (0, 0, SCREEN_WIDTH, 50))
+    draw_header_color(screen, BLUE_TOSCA, WHITE_GREEN, (0, 0, SCREEN_WIDTH, 50))
     header_text = render_text_with_outline("DASHBOARD SMART RECYCLE BIN", large_font, WHITE, DARK_GRAY)
     screen.blit(header_text, (20, 10))
 
