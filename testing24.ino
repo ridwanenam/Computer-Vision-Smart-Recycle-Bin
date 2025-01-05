@@ -21,25 +21,55 @@ Servo myservo;
 
 // buzzer
 #define buzzer 12
-
-String command = "";
+bool buzzerState = false;
+unsigned long previousBuzzerMillis = 0; 
+unsigned long buzzerInterval = 0; 
+bool buzzerTone = false;
 
 // konstanta stepper
 #define STEPS_PER_REV 200
 #define DEGREE_STEP (STEPS_PER_REV / 360.0)
 #define STEPS_MANUAL_DEGREES (int)(DEGREE_STEP * 10)
 
+#define QUEUE_SIZE 10
+
 // variabel posisi stepper
 int current_position = 0;
-
-bool buzzerState = false;
-unsigned long previousBuzzerMillis = 0; 
-unsigned long buzzerInterval = 0; 
-bool buzzerTone = false;
 
 int manual_left_degree = 1;
 int manual_right_degree = 1;
 
+// queue serial command
+String commandQueue[QUEUE_SIZE];
+int queueStart = 0;
+int queueEnd = 0;
+
+bool isQueueFull() {
+  return ((queueEnd + 1) % QUEUE_SIZE == queueStart);
+}
+
+bool isQueueEmpty() {
+  return (queueStart == queueEnd);
+}
+
+bool enqueue(String command) {
+  if (isQueueFull()) {
+    Serial.println("Queue fulled!");
+    return false;
+  }
+  commandQueue[queueEnd] = command;
+  queueEnd = (queueEnd + 1) % QUEUE_SIZE;
+  return true;
+}
+
+String dequeue() {
+  if (isQueueEmpty()) {
+    return "";
+  }
+  String command = commandQueue[queueStart];
+  queueStart = (queueStart + 1) % QUEUE_SIZE;
+  return command;
+}
 
 void setup() {
   Serial.begin(9600);
@@ -89,7 +119,7 @@ void rotateStepper(int steps, bool clockwise) {
 }
 
 void left() {
-  rotateStepper(STEPS_MANUAL_DEGREES*20, false);
+  rotateStepper(STEPS_MANUAL_DEGREES * 20, false);
   current_position -= manual_left_degree;
   if (current_position < 0) {
     current_position += 360;
@@ -97,11 +127,17 @@ void left() {
 }
 
 void right() {
-  rotateStepper(STEPS_MANUAL_DEGREES*20, true);
+  rotateStepper(STEPS_MANUAL_DEGREES * 20, true);
   current_position += manual_right_degree;
   if (current_position >= 360) {
     current_position -= 360;
   }
+}
+
+void openServo() {
+  myservo.write(70);
+  delay(1250);
+  myservo.write(10);
 }
 
 void reset() {
@@ -116,18 +152,8 @@ void reset() {
     }
   }
 
-  else {
-    Serial.print("NOTE: Current position = 0");
-  }
   current_position = 0;
   delay(1000);
-  myservo.write(10);
-}
-
-
-void openServo() {
-  myservo.write(70);
-  delay(1250);
   myservo.write(10);
 }
 
@@ -142,7 +168,6 @@ void moveToDegree(int target_degree) {
     steps_to_move = (360 - current_position + target_degree) * DEGREE_STEP;
     rotateStepper(steps_to_move, true); 
   }
-
   current_position = target_degree; 
 }
 
@@ -198,67 +223,81 @@ void handleBuzzer() {
 }
 
 void handleDistance() {
+  static unsigned long lastMillis = 0;
+  unsigned long currentMillis = millis();
+
+  if (currentMillis - lastMillis >= 750) {
+    lastMillis = currentMillis;
+
     float distanceOrganik = getDistance(TRIG_ORGANIK, ECHO_ORGANIK);
     float distanceAnorganik = getDistance(TRIG_ANORGANIK, ECHO_ANORGANIK);
     float distanceB3 = getDistance(TRIG_B3, ECHO_B3);
 
-    Serial.print("");
     Serial.print(distanceOrganik);
     Serial.print(",");
     Serial.print(distanceAnorganik);
     Serial.print(",");
     Serial.println(distanceB3);
-    delay(750);
+  }
 }
 
 void handleSerial() {
   if (Serial.available()) {
-    command = Serial.readStringUntil('\n');
+    String command = Serial.readStringUntil('\n');
     command.trim();
-
-    if (command.startsWith("cmd:")) {  
-      String cmd = command.substring(4);  
-      if (cmd == "Manual") {
-        Serial.println("Manual Mode diterima datanya");
-      } else if (cmd == "Auto") {
-        Serial.println("Auto Mode diterima datanya");
-      } else if (cmd == "LEFT") {
-        Serial.println("LEFT diterima datanya");
-        left();
-      } else if (cmd == "RIGHT") {
-        Serial.println("RIGHT diterima datanya");
-        right();
-      } else if (cmd == "OPEN") {
-        Serial.println("OPEN diterima datanya");
-        openServo();
-      } else if (cmd == "RESET") {
-        Serial.println("RESET diterima datanya");
-        reset();
-      } else if (cmd == "AutoOrganik") {
-        Serial.println("AutoOrganik diterima datanya");
-        autoOrganik();
-      } else if (cmd == "AutoAnorganik") {
-        Serial.println("AutoAnorganik diterima datanya");
-        autoAnorganik();
-      } else if (cmd == "AutoB3") {
-        Serial.println("AutoB3 diterima datanya");
-        autoB3();
-      } else if (cmd == "BuzzerON") {
-        Serial.println("Buzzer on diterima datanya");
-        buzzerOn();
-      } else if (cmd == "BuzzerOFF") {
-        Serial.println("Buzzer off diterima datanya");
-        buzzerOff();
-      } else {
-        Serial.print("No Command: ");
-        Serial.println(cmd);
+    if (command.startsWith("cmd:")) {
+      String cmd = command.substring(4);
+      if (!enqueue(cmd)) {
+        Serial.println("Queue full, can't handle command anymore.");
       }
+    }
+  }
+}
+
+void processQueue() {
+  if (!isQueueEmpty()) {
+    String command = dequeue();
+    if (command == "LEFT") {
+      left();
+      Serial.println("LEFT process.");
+    } else if (command == "RIGHT") {
+      right();
+      Serial.println("RIGHT process.");
+    } else if (command == "OPEN") {
+      openServo();
+      Serial.println("OPEN process.");
+    } else if (command == "RESET") {
+      reset();
+      Serial.println("RESET process.");
+    } else if (command == "AutoOrganik") {
+      autoOrganik();
+      Serial.println("AutoOrganik process.");
+    } else if (command == "AutoAnorganik") {
+      autoAnorganik();
+      Serial.println("AutoAnorganik process.");
+    } else if (command == "AutoB3") {
+      autoB3();
+      Serial.println("AutoB3 process.");
+    } else if (command == "BuzzerON") {
+      buzzerOn();
+      Serial.println("BuzzerON process.");
+    } else if (command == "BuzzerOFF") {
+      buzzerOff();
+      Serial.println("BuzzerOFF process.");
+    } else if (command == "Auto") {;
+      Serial.println("AUTO MODE.");
+    } else if (command == "Manual") {
+      Serial.println("MANUAL MODE.");
+    } else {
+      Serial.print("No Command: ");
+      Serial.println(command);
     }
   }
 }
 
 void loop() {
   handleSerial();
+  processQueue();
   handleDistance();
   handleBuzzer();
 }
