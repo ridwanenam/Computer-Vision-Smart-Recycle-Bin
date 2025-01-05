@@ -12,7 +12,7 @@
 #define ENABLE 8
 #define DIRECTION 9
 #define STEP 10
-#define SPEED 3
+#define SPEED 2
 #define FORWARD HIGH
 #define REVERSE LOW
 
@@ -21,55 +21,23 @@ Servo myservo;
 
 // buzzer
 #define buzzer 12
-bool buzzerState = false;
-unsigned long previousBuzzerMillis = 0; 
-unsigned long buzzerInterval = 0; 
-bool buzzerTone = false;
 
-// konstanta stepper
+String command = "";
+
+// stepper constant
 #define STEPS_PER_REV 200
 #define DEGREE_STEP (STEPS_PER_REV / 360.0)
 #define STEPS_MANUAL_DEGREES (int)(DEGREE_STEP * 10)
 
-#define QUEUE_SIZE 10
-
-// variabel posisi stepper
+// stepper position
 int current_position = 0;
+
+unsigned long startDetectionTime = 0; 
+bool isDetecting = false;             
 
 int manual_left_degree = 1;
 int manual_right_degree = 1;
 
-// queue serial command
-String commandQueue[QUEUE_SIZE];
-int queueStart = 0;
-int queueEnd = 0;
-
-bool isQueueFull() {
-  return ((queueEnd + 1) % QUEUE_SIZE == queueStart);
-}
-
-bool isQueueEmpty() {
-  return (queueStart == queueEnd);
-}
-
-bool enqueue(String command) {
-  if (isQueueFull()) {
-    Serial.println("Queue fulled!");
-    return false;
-  }
-  commandQueue[queueEnd] = command;
-  queueEnd = (queueEnd + 1) % QUEUE_SIZE;
-  return true;
-}
-
-String dequeue() {
-  if (isQueueEmpty()) {
-    return "";
-  }
-  String command = commandQueue[queueStart];
-  queueStart = (queueStart + 1) % QUEUE_SIZE;
-  return command;
-}
 
 void setup() {
   Serial.begin(9600);
@@ -84,7 +52,7 @@ void setup() {
   pinMode(ENABLE, OUTPUT);
   pinMode(DIRECTION, OUTPUT);
   pinMode(STEP, OUTPUT);
-  digitalWrite(ENABLE, LOW); 
+  digitalWrite(ENABLE, LOW);
 
   pinMode(buzzer, OUTPUT);
   digitalWrite(buzzer, LOW);
@@ -119,16 +87,16 @@ void rotateStepper(int steps, bool clockwise) {
 }
 
 void left() {
-  rotateStepper(STEPS_MANUAL_DEGREES * 20, false);
-  current_position -= manual_left_degree;
+  rotateStepper(STEPS_MANUAL_DEGREES*10, false);
+  current_position -= manual_left_degree*10;
   if (current_position < 0) {
     current_position += 360;
   }
 }
 
 void right() {
-  rotateStepper(STEPS_MANUAL_DEGREES * 20, true);
-  current_position += manual_right_degree;
+  rotateStepper(STEPS_MANUAL_DEGREES*10, true);
+  current_position += manual_right_degree*10;
   if (current_position >= 360) {
     current_position -= 360;
   }
@@ -136,25 +104,9 @@ void right() {
 
 void openServo() {
   myservo.write(70);
-  delay(1250);
+  delay(2000);
   myservo.write(10);
-}
-
-void reset() {
-  if (current_position != 0) {
-    int steps_cw = current_position * DEGREE_STEP;
-    int steps_ccw = (360 - current_position) * DEGREE_STEP;
-
-    if (steps_cw <= steps_ccw) {
-      rotateStepper(steps_cw, false); // CounterClockWise
-    } else {
-      rotateStepper(steps_ccw, true); // Clockwise
-    }
-  }
-
-  current_position = 0;
   delay(1000);
-  myservo.write(10);
 }
 
 void moveToDegree(int target_degree) {
@@ -163,141 +115,147 @@ void moveToDegree(int target_degree) {
 
   if (target_degree >= current_position) {
     steps_to_move = target_steps - (int)(current_position * DEGREE_STEP);
-    rotateStepper(steps_to_move, true); // ClockWise
-  } else {
-    steps_to_move = (360 - current_position + target_degree) * DEGREE_STEP;
     rotateStepper(steps_to_move, true); 
+  } else {
+    steps_to_move = (int)((current_position - target_degree) * DEGREE_STEP);
+    rotateStepper(steps_to_move, false); 
   }
+
   current_position = target_degree; 
 }
 
+
+void reset() {
+  int steps_to_zero = abs((int)(current_position * DEGREE_STEP));
+  
+  if (current_position > 0) {
+    rotateStepper(steps_to_zero, false); 
+  } else if (current_position < 0) {
+    rotateStepper(steps_to_zero, true); 
+  }
+  current_position = 0;
+}
+
+
 void autoOrganik() {
-  moveToDegree(100); 
+  moveToDegree(-190); 
   delay(1000);
   openServo(); 
   reset(); 
 }
 
 void autoAnorganik() {
-  moveToDegree(430); 
+  moveToDegree(345); 
+  delay(1000);
+  openServo(); 
+  reset();
+}
+
+void autoB3() {
+  moveToDegree(190); 
   delay(1000);
   openServo(); 
   reset(); 
 }
 
-void autoB3() {
-  moveToDegree(300); 
-  delay(1000);
-  openServo();
-  reset(); 
-}
-
-void buzzerOn() {
-  buzzerState = true; 
-}
-
-void buzzerOff() {
-  buzzerState = false;
-  digitalWrite(buzzer, LOW); 
-}
-
 void handleBuzzer() {
-  if (buzzerState) {
-    unsigned long currentMillis = millis();
-    if (currentMillis - previousBuzzerMillis >= buzzerInterval) {
-      previousBuzzerMillis = currentMillis;
-
-      if (buzzerTone) {
-        digitalWrite(buzzer, LOW);
-        buzzerTone = false;
-        buzzerInterval = 1;
-      } else {
-        digitalWrite(buzzer, HIGH);
-        buzzerTone = true;
-        buzzerInterval = 2;
-      }
-    }
-  } else {
-    digitalWrite(buzzer, LOW);
-  }
-}
-
-void handleDistance() {
-  static unsigned long lastMillis = 0;
-  unsigned long currentMillis = millis();
-
-  if (currentMillis - lastMillis >= 750) {
-    lastMillis = currentMillis;
-
     float distanceOrganik = getDistance(TRIG_ORGANIK, ECHO_ORGANIK);
     float distanceAnorganik = getDistance(TRIG_ANORGANIK, ECHO_ANORGANIK);
     float distanceB3 = getDistance(TRIG_B3, ECHO_B3);
 
+    bool isBelowThreshold = (distanceOrganik > 0 && distanceOrganik < 10) || 
+                            (distanceAnorganik > 0 && distanceAnorganik < 10) || 
+                            (distanceB3 > 0 && distanceB3 < 10);
+
+    if (isBelowThreshold) {
+        if (!isDetecting) {
+            startDetectionTime = millis();
+            isDetecting = true;
+        } else if (millis() - startDetectionTime >= 2000) {
+            unsigned char i;
+            for (i = 0; i < 80; i++) {
+                digitalWrite(buzzer, HIGH); // high frequency 
+                delayMicroseconds(500);    
+                digitalWrite(buzzer, LOW);
+                delayMicroseconds(500);
+            }
+            for (i = 0; i < 100; i++) {
+                digitalWrite(buzzer, HIGH); // low frequency
+                delayMicroseconds(1000);  
+                digitalWrite(buzzer, LOW);
+                delayMicroseconds(1000);
+            }
+        }
+    } else {
+        isDetecting = false;
+        startDetectionTime = 0;
+        digitalWrite(buzzer, LOW);
+    }
+}
+
+void buzzerOff(){
+  digitalWrite(buzzer, LOW);
+}
+
+void handleDistance() {
+    float distanceOrganik = getDistance(TRIG_ORGANIK, ECHO_ORGANIK);
+    float distanceAnorganik = getDistance(TRIG_ANORGANIK, ECHO_ANORGANIK);
+    float distanceB3 = getDistance(TRIG_B3, ECHO_B3);
+
+    Serial.print("");
     Serial.print(distanceOrganik);
     Serial.print(",");
     Serial.print(distanceAnorganik);
     Serial.print(",");
     Serial.println(distanceB3);
-  }
+    delay(750);
 }
 
 void handleSerial() {
   if (Serial.available()) {
-    String command = Serial.readStringUntil('\n');
+    command = Serial.readStringUntil('\n');
     command.trim();
-    if (command.startsWith("cmd:")) {
-      String cmd = command.substring(4);
-      if (!enqueue(cmd)) {
-        Serial.println("Queue full, can't handle command anymore.");
-      }
-    }
-  }
-}
 
-void processQueue() {
-  if (!isQueueEmpty()) {
-    String command = dequeue();
-    if (command == "LEFT") {
-      left();
-      Serial.println("LEFT process.");
-    } else if (command == "RIGHT") {
-      right();
-      Serial.println("RIGHT process.");
-    } else if (command == "OPEN") {
-      openServo();
-      Serial.println("OPEN process.");
-    } else if (command == "RESET") {
-      reset();
-      Serial.println("RESET process.");
-    } else if (command == "AutoOrganik") {
-      autoOrganik();
-      Serial.println("AutoOrganik process.");
-    } else if (command == "AutoAnorganik") {
-      autoAnorganik();
-      Serial.println("AutoAnorganik process.");
-    } else if (command == "AutoB3") {
-      autoB3();
-      Serial.println("AutoB3 process.");
-    } else if (command == "BuzzerON") {
-      buzzerOn();
-      Serial.println("BuzzerON process.");
-    } else if (command == "BuzzerOFF") {
-      buzzerOff();
-      Serial.println("BuzzerOFF process.");
-    } else if (command == "Auto") {;
-      Serial.println("AUTO MODE.");
-    } else if (command == "Manual") {
-      Serial.println("MANUAL MODE.");
-    } else {
-      Serial.print("No Command: ");
-      Serial.println(command);
+    if (command.startsWith("cmd:")) {  
+      String cmd = command.substring(4);  
+      if (cmd == "Manual") {
+        Serial.println("Manual Mode");
+      } else if (cmd == "Auto") {
+        Serial.println("Auto Mode");
+      } else if (cmd == "LEFT") {
+        Serial.println("LEFT");
+        left();
+      } else if (cmd == "RIGHT") {
+        Serial.println("RIGHT");
+        right();
+      } else if (cmd == "OPEN") {
+        Serial.println("OPEN");
+        openServo();
+      } else if (cmd == "RESET") {
+        Serial.println("RESET");
+        reset();
+      } else if (cmd == "AutoOrganik") {
+        Serial.println("AutoOrganik");
+        autoOrganik();
+      } else if (cmd == "AutoAnorganik") {
+        Serial.println("AutoAnorganik");
+        autoAnorganik();
+      } else if (cmd == "AutoB3") {
+        Serial.println("AutoB3");
+        autoB3();
+      } else if (cmd == "BuzzerOFF") {
+        Serial.println("Buzzer off");
+        buzzerOff();
+      } else {
+        Serial.print("No Command: ");
+        Serial.println(cmd);
+      }
     }
   }
 }
 
 void loop() {
   handleSerial();
-  processQueue();
   handleDistance();
   handleBuzzer();
 }
