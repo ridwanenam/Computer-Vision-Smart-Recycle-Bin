@@ -9,7 +9,7 @@ from queue import Queue
 pygame.init()
 
 command_queue = Queue()
-serial_port = "/dev/ttyACM0" 
+serial_port = "/dev/ttyUSB0" 
 baud_rate = 9600
 arduino = serial.Serial(serial_port, baud_rate)
 
@@ -127,6 +127,8 @@ def calculate_progress(distance):
 
 # transfer data ultrasonik
 def read_arduino_data():
+    start_time = None
+    buzzer_active = False
     try:
         if arduino.in_waiting > 0:
             data = arduino.readline().decode('utf-8').strip()
@@ -144,10 +146,20 @@ def read_arduino_data():
                 progress_values["B3"] = calculate_progress(b3)
 
                 # buzzer
-                if organik < 10  or anorganik < 10 or b3 < 10:
-                    send_command_to_arduino("BuzzerON")
+                if organik < 10 or anorganik < 10 or b3 < 10:
+                    if start_time is None: 
+                        start_time = time.time()
+                    
+                    elapsed_time = time.time() - start_time
+                    if elapsed_time >= 1.5: 
+                        if not buzzer_active:
+                            send_command_to_arduino("BuzzerON")
+                            buzzer_active = True
                 else:
-                    send_command_to_arduino("BuzzerOFF")
+                    start_time = None
+                    if buzzer_active: 
+                        send_command_to_arduino("BuzzerOFF")
+                        buzzer_active = False
             else:
                 print(f"Data format error: {data}")
     except Exception as e:
