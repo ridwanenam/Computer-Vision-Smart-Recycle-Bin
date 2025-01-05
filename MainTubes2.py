@@ -9,7 +9,7 @@ from queue import Queue
 pygame.init()
 
 command_queue = Queue()
-serial_port = "/dev/ttyUSB0" 
+serial_port = "/dev/ttyACM0" 
 baud_rate = 9600
 arduino = serial.Serial(serial_port, baud_rate)
 
@@ -23,7 +23,7 @@ BLACK = (0, 0, 0)
 RED = (255, 0, 0)
 GRAY = (200, 200, 200)
 DARK_GRAY = (30, 30, 30)
-ELEGANT_BORDER = (100, 100, 100)
+GRAY2 = (100, 100, 100)
 WHITE_RED = (255, 68, 68)
 WHITE_GREEN = (6, 218, 218)
 BLUE_TOSCA = (7, 217, 160)
@@ -37,7 +37,7 @@ font2 = pygame.font.SysFont("Arial", 23)
 cap = cv2.VideoCapture(0, cv2.CAP_V4L2)
 
 if not cap.isOpened():
-    print("Error to open video capture.")
+    print("Video Capture Error!!")
     pygame.quit()
     exit()
 
@@ -45,7 +45,7 @@ if not cap.isOpened():
 model_path = ("ModelV3_ncnn_model")
 model = YOLO(model_path)
 
-# indeks: 0 - anorganik, 1 - B3, 2 - organik (data.yaml)
+# indeks: 0 - anorganik, 1 - B3, 2 - organik 
 objects_to_detect = [0, 1, 2]
 last_detected = None
 
@@ -53,7 +53,7 @@ blink_timer = 0
 blink_button = None
 
 blink_duration = 0.3
-stable_duration = 3
+stable_duration = 2
 
 detected_start_time = None  
 object_stable = False 
@@ -69,7 +69,7 @@ def render_text_with_outline(text, font, text_color, outline_color):
     outline_surface.blit(outline, (0, 0))
     return outline_surface
 
-def draw_button(x, y, width, height, color, text, text_color=WHITE, border_color=ELEGANT_BORDER, border_radius=2, button_blinking=False):
+def draw_button(x, y, width, height, color, text, text_color=WHITE, border_color=GRAY2, border_radius=2, button_blinking=False):
     button_color = GRAY if button_blinking else color
     pygame.draw.rect(screen, border_color, (x, y, width, height), border_radius)
     pygame.draw.rect(screen, button_color, (x + 2, y + 2, width - 4, height - 4), border_radius)
@@ -125,10 +125,8 @@ def calculate_progress(distance):
     else:
         return max(0, (31 - distance) / 26)
 
-# transfer data ultrasonik
+#  data ultrasonik
 def read_arduino_data():
-    start_time = None
-    buzzer_active = False
     try:
         if arduino.in_waiting > 0:
             data = arduino.readline().decode('utf-8').strip()
@@ -144,22 +142,6 @@ def read_arduino_data():
                 progress_values["ORGANIK"] = calculate_progress(organik)
                 progress_values["ANORGANIK"] = calculate_progress(anorganik)
                 progress_values["B3"] = calculate_progress(b3)
-
-                # buzzer
-                if organik < 10 or anorganik < 10 or b3 < 10:
-                    if start_time is None: 
-                        start_time = time.time()
-                    
-                    elapsed_time = time.time() - start_time
-                    if elapsed_time >= 1.5: 
-                        if not buzzer_active:
-                            send_command_to_arduino("BuzzerON")
-                            buzzer_active = True
-                else:
-                    start_time = None
-                    if buzzer_active: 
-                        send_command_to_arduino("BuzzerOFF")
-                        buzzer_active = False
             else:
                 print(f"Data format error: {data}")
     except Exception as e:
@@ -198,7 +180,7 @@ while running:
             blink_button = None
             blink_timer = 0
 
-    # frame dari kamera 1
+    # frame camera
     ret, frame = cap.read()
     if not ret:
         print("Can't read frame.")
@@ -249,7 +231,7 @@ while running:
 
     annotated_frame = results[0].plot()
 
-    # mode dan kontrol
+    # mode & kontrol
     for event in pygame.event.get():
         if event.type == QUIT:
             running = False
@@ -266,25 +248,25 @@ while running:
                 send_command_to_arduino("Manual") # Mode Manual
             elif btn_left.collidepoint(mouse_pos) and current_mode == "Manual":
                 print("LEFT")
-                send_command_to_arduino("LEFT") # LEFT = stepper rotasi ke kiri (CCW)
+                send_command_to_arduino("LEFT") 
                 blink_button = "LEFT"
             elif btn_right.collidepoint(mouse_pos) and current_mode == "Manual":
                 print("RIGHT")
-                send_command_to_arduino("RIGHT") # RIGHT = stepper rotasi ke kanan (CW)
+                send_command_to_arduino("RIGHT") 
                 blink_button = "RIGHT"
             elif btn_servo.collidepoint(mouse_pos) and current_mode == "Manual":
                 print("OPEN")
-                send_command_to_arduino("OPEN") # OPEN = buka tutup servo
+                send_command_to_arduino("OPEN") 
                 blink_button = "OPEN"
             elif btn_reset.collidepoint(mouse_pos) and current_mode in ["Auto", "Manual"]:
                 print("RESET")
-                send_command_to_arduino("RESET") # RESET = reset stepper dan servo 
+                send_command_to_arduino("RESET")
                 blink_button = "RESET"
                 detected_object = None
                 last_detected = None
                 detected_start_time = None
                 object_stable = False
-                send_command_to_arduino("BuzzerOFF")
+                send_command_to_arduino("buzzerOff")
 
 
     # header
@@ -292,12 +274,12 @@ while running:
     header_text = render_text_with_outline("DASHBOARD SMART RECYCLE BIN", large_font, WHITE, DARK_GRAY)
     screen.blit(header_text, (20, 10))
 
-    # FPS dan frame kamera
+    # FPS & frame camera
     inference_time = results[0].speed['inference']
     fps = 1000 / inference_time
     draw_frame(250, 85, 400, 250, annotated_frame, fps)
 
-    # progress bar volume sampah
+    # progress bar
     pygame.draw.rect(screen, WHITE, (15, 105, 225, 210), border_radius=15)
     pygame.draw.rect(screen, DARK_GRAY, (20, 110, 215, 200), border_radius=10)
     volume_text = render_text_with_outline("VOLUME SAMPAH", font2, BLUE_TOSCA, WHITE)
@@ -307,7 +289,7 @@ while running:
     for i, (label, value) in enumerate(progress_values.items()):
         draw_progress_bar(30, bar_start_y + i * 50, 160, 20, value, label)
 
-    # tombol mode
+    # button mode
     pygame.draw.rect(screen, WHITE, (660, 80, 225, 90), border_radius=5)
     pygame.draw.rect(screen, DARK_GRAY, (665, 85, 215, 80), border_radius=5)
     mode_text = render_text_with_outline("MODE", font2, BLUE_TOSCA, WHITE)
@@ -316,13 +298,13 @@ while running:
     btn_auto = draw_button(700, 120, 60, 37, BLUE_TOSCA if current_mode == "Auto" else GRAY, "A")
     btn_manual = draw_button(780, 120, 60, 37, BLUE_TOSCA if current_mode == "Manual" else GRAY, "M")
 
-    # tombol kontrol
+    # control button
     pygame.draw.rect(screen, WHITE, (660, 185, 225, 145), border_radius=15)
     pygame.draw.rect(screen, DARK_GRAY, (665, 190, 215, 135), border_radius=10)
     stepper_text = render_text_with_outline("CONTROL", font2, BLUE_TOSCA, WHITE)
     screen.blit(stepper_text, (717, 197))
 
-    # gambar tombol
+    # button draw
     btn_left = draw_button(680, 230, 80, 40, BLUE_TOSCA, "LEFT", button_blinking=(blink_button == "LEFT"))
     btn_right = draw_button(780, 230, 80, 40, BLUE_TOSCA, "RIGHT", button_blinking=(blink_button == "RIGHT"))
     btn_reset = draw_button(680, 277, 80, 40, BLUE_TOSCA, "RESET", button_blinking=(blink_button == "RESET"))
