@@ -1,4 +1,4 @@
-# Computer Vision Recycle Bin
+# Computer-Vision-Smart-Recycle-Bin
 
 Roboflow: https://universe.roboflow.com/tubesmikom-ett56/sampahdetection2/dataset/2 <br>
 Stepper: https://forum.hobbycomponents.com/viewtopic.php?t=2159 <br>
